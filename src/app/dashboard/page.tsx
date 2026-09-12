@@ -1,7 +1,28 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { InvoiceData } from '@/types/income';
+
+interface LineItem {
+  description: string;
+  quantity: number;
+  price: number;
+  total: number;
+}
+
+interface InvoiceData {
+  vendorName: string;
+  gstin: string;
+  invoiceNumber: string;
+  invoiceDate: string; // DD/MM/YYYY format
+  currency: string;
+  subtotal: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  taxAmount: number;
+  totalAmount: number;
+  lineItems: LineItem[];
+}
 
 export default function Dashboard() {
   // State
@@ -154,7 +175,7 @@ export default function Dashboard() {
       // Disable editing and save changes
       setEditedLineItems(prev => prev.map(item => ({ ...item, editing: false })));
       // Update the main invoiceData with edited line items
-      setInvoiceData(prev => prev ? { ...prev, lineItems: prev.lineItems.map((item, index) => ({
+      setInvoiceData(prev => prev ? { ...prev, lineItems: prev.lineItems.map((item: LineItem, index: number) => ({
         ...editedLineItems[index],
         description: editedLineItems[index].description,
         quantity: Number(editedLineItems[index].quantity),
@@ -197,7 +218,7 @@ export default function Dashboard() {
       ];
 
       // Add line items
-      invoiceData.lineItems.forEach(item => {
+      invoiceData.lineItems.forEach((item: LineItem) => {
         wsData.push([item.description, item.quantity, item.price, item.total]);
       });
 
@@ -364,7 +385,7 @@ export default function Dashboard() {
                         ></div>
                       </div>
                       <p className="mt-1 text-xs text-slate-400 text-right">
-                        Processing... {Math.round(profit)}%
+                        Processing... {Math.round(progress)}%
                       </p>
                     </div>
                   )}
