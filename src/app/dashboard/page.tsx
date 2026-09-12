@@ -138,7 +138,7 @@ export default function Dashboard() {
       return;
     }
 
-    processFile(file);
+    await processFile(file);
   };
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -229,6 +229,24 @@ export default function Dashboard() {
     }
   }, [invoiceData]);
 
+  // Copy JSON to clipboard
+  const copyJSON = useCallback(() => {
+    if (!invoiceData) return;
+
+    navigator.clipboard
+      .writeText(JSON.stringify(invoiceData, null, 2))
+      .then(() => {
+        setToastMessage('JSON copied to clipboard!');
+        setToastType('success');
+        setShowToast(true);
+      })
+      .catch((err) => {
+        setToastMessage('Failed to copy JSON');
+        setToastType('error');
+        setShowToast(true);
+      });
+  }, [invoiceData]);
+
   // Get GSTIN status badge
   const getGstinStatus = () => {
     if (!invoiceData?.gstin) return { text: 'Missing', color: 'text-red-400' };
@@ -306,11 +324,11 @@ export default function Dashboard() {
           <div className="w-full max-w-7xl grid gap-8">
             {/* Left Column: Upload Zone & Preview */}
             <div className="relative group bg-slate-900/50 backdrop-blur-sm rounded-2xl border border-slate-800/50 hover:border-indigo-500/50 p-6 transition-all duration-300 ease-in-out hover:shadow-lg hover:shadow-indigo-500/10">
-              <div className="absolute inset-0 -z-0 rounded-2xl bg-gradient-to-br from-indigo-900/5 to-slate-900/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <div className="absolute inset-0 -z-0 rounded-2xl bg-gradient-to-br from-indigo-900/5 to-slate-900/5 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-300"></div>
 
               {/* Upload Area */}
               {!isProcessing && !uploadedFilePreview ? (
-                <div className="relative z-0 text-center py-12" onClick={() => document.getElementById('file-upload')?.click()} onDragOver={handleDragOver} onDrop={handleDrop}>
+                <div className="relative z-0 text-center py-12 cursor-pointer" onClick={() => document.getElementById('file-upload')?.click()} onDragOver={handleDragOver} onDrop={handleDrop}>
                   <div className="relative z-0 flex h-14 w-14 items-center justify-center mb-4 bg-indigo-500/10 rounded-lg">
                     <svg className="flex-shrink-0 h-6 w-6 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4a2 2 0 012-2h2.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01-.293.707V14a2 2 0 01-2 2h-3.172a1 1 0 01-.707-.293L7 11V4z"></path>
@@ -388,7 +406,7 @@ export default function Dashboard() {
                           setInvoiceData(null);
                           setEditedLineItems([]);
                         }}
-                        className="flex-1 px-4 py-2 bg-slate-800/50 hover:bg-slate-700/50 text-slate-300 rounded-lg transition-all duration-200"
+                        className="flex-1 px-4 py-2 bg-slate-800/50 hover:bg-slate-700/50 text-slate-300 rounded-lg cursor-pointer transition-all duration-200"
                       >
                         Remove File
                       </button>
@@ -396,7 +414,7 @@ export default function Dashboard() {
                     {(!isProcessing && uploadedFilePreview) && (
                       <button
                         onClick={toggleEditing}
-                        className={`flex-1 px-4 py-2 ${isEditing ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 hover:bg-slate-700/50 text-slate-300'} rounded-lg font-medium transition-all duration-200`}
+                        className={`flex-1 px-4 py-2 ${isEditing ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 hover:bg-slate-700/50 text-slate-300'} rounded-lg font-medium cursor-pointer transition-all duration-200`}
                       >
                         {isEditing ? 'Save Changes' : 'Edit Line Items'}
                       </button>
@@ -404,7 +422,7 @@ export default function Dashboard() {
                     {(!isProcessing && uploadedFilePreview) && (
                       <button
                         onClick={exportToExcel}
-                        className="flex-1 px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-all duration-200"
+                        className="flex-1 px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 cursor-pointer transition-all duration-200"
                       >
                         Export to Excel
                       </button>
@@ -442,7 +460,7 @@ export default function Dashboard() {
 
             {/* Right Column: Results Card */}
             <div className="relative group bg-slate-900/50 backdrop-blur-sm rounded-2xl border border-slate-800/50 hover:border-indigo-500/50 p-6 transition-all duration-300 ease-in-out hover:shadow-lg hover:shadow-indigo-500/10">
-              <div className="absolute inset-0 -z-0 rounded-2xl bg-gradient-to-br from-indigo-900/5 to-slate-900/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <div className="absolute inset-0 -z-0 rounded-2xl bg-gradient-to-br from-indigo-900/5 to-slate-900/5 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-300"></div>
 
               {/* Header */}
               <div className="mb-4 flex items-center justify-between">
@@ -450,19 +468,19 @@ export default function Dashboard() {
                 <div className="flex space-x-2">
                   <button
                     onClick={() => setActiveTab('summary')}
-                    className={`px-3 py-1.5 text-sm font-medium rounded-lg ${activeTab === 'summary' ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'} transition-all duration-200`}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-lg ${activeTab === 'summary' ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'} cursor-pointer transition-all duration-200`}
                   >
                     Summary
                   </button>
                   <button
                     onClick={() => setActiveTab('lineItems')}
-                    className={`px-3 py-1.5 text-sm font-medium rounded-lg ${activeTab === 'lineItems' ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'} transition-all duration-200`}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-lg ${activeTab === 'lineItems' ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'} cursor-pointer transition-all duration-200`}
                   >
                     Line Items
                   </button>
                   <button
                     onClick={() => setActiveTab('rawJson')}
-                    className={`px-3 py-1.5 text-sm font-medium rounded-lg ${activeTab === 'rawJson' ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'} transition-all duration-200`}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-lg ${activeTab === 'rawJson' ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'} cursor-pointer transition-all duration-200`}
                   >
                     Raw JSON
                   </button>
@@ -581,7 +599,7 @@ export default function Dashboard() {
                                       onClick={() => {
                                         // In a real app, this might open a detail view
                                       }}
-                                      className="text-xs text-indigo-400 hover:text-indigo-300"
+                                      className="text-xs text-indigo-400 hover:text-indigo-300 cursor-pointer"
                                     >
                                       <svg className="flex-shrink-0 h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 002-2H9z"></path>
@@ -603,6 +621,14 @@ export default function Dashboard() {
 
               {activeTab === 'rawJson' && (
                 <div className="h-96 overflow-auto bg-slate-800/50 rounded-lg p-3 text-xs font-mono text-slate-300">
+                  <div className="flex justify-end mb-2">
+                    <button
+                      onClick={copyJSON}
+                      className="px-3 py-1 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 cursor-pointer transition-all duration-200"
+                    >
+                      Copy JSON
+                    </button>
+                  </div>
                   <pre className="whitespace-pre-wrap">{JSON.stringify(invoiceData, null, 2)}</pre>
                 </div>
               )}
@@ -612,7 +638,7 @@ export default function Dashboard() {
           /* Empty State - Upload Zone */
           <div className="w-full max-w-4xl">
             <div className="relative group bg-slate-900/50 backdrop-blur-sm rounded-2xl border border-slate-800/50 hover:border-indigo-500/50 p-12 text-center transition-all duration-300 ease-in-out hover:shadow-lg hover:shadow-indigo-500/10">
-              <div className="absolute inset-0 -z-0 rounded-2xl bg-gradient-to-br from-indigo-900/5 to-slate-900/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <div className="absolute inset-0 -z-0 rounded-2xl bg-gradient-to-br from-indigo-900/5 to-slate-900/5 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-300"></div>
               <div className="relative z-0">
                 <div className="flex h-16 w-16 items-center justify-center mb-6 bg-indigo-500/10 rounded-lg">
                   <svg className="flex-shrink-0 h-8 w-8 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
