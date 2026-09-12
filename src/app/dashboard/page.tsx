@@ -1,0 +1,643 @@
+'use client';
+
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { InvoiceData } from '@/types/income';
+
+export default function Dashboard() {
+  // State
+  const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error'>('success');
+  const [activeTab, setActiveTab] = useState<'summary' | 'lineItems' | 'rawJson'>('summary');
+  const [editedLineItems, setEditedLineItems] = useState<any[]>([]);
+  const [isEditing, setIsEditing] = useState(false);
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const [uploadedFilePreview, setUploadedFilePreview] = useState<string | null>(null);
+  const [progress, setProgress] = useState(0);
+  const progressRef = useRef<number>(0);
+
+  // Toast timeout
+  useEffect(() => {
+    if (showToast) {
+      const timer = setTimeout(() => {
+        setShowToast(false);
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [showToast]);
+
+  // Simulate progress during processing
+  useEffect(() => {
+    if (isProcessing) {
+      const interval = setInterval(() => {
+        if (progressRef.current < 95) {
+          progressRef.current += Math.random() * 3;
+          setProgress(Math.min(progressRef.current, 95));
+        }
+      }, 100);
+      return () => clearInterval(interval);
+    } else {
+      progressRef.current = 0;
+      setProgress(0);
+    }
+  }, [isProcessing]);
+
+  // Process file
+  const processFile = async (file: File) => {
+    setError(null);
+    setIsProcessing(true);
+    setUploadedFileName(file.name);
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setUploadedFilePreview(e.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+
+    try {
+      const { base64Data, mimeType } = await fileToBase64(file);
+
+      const response = await fetch('/api/parse-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ base64Data, mimeType }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to parse document');
+      }
+
+      if (data.success) {
+        setInvoiceData(data.data);
+        setEditedLineItems(data.data.lineItems.map((item: any) => ({
+          ...item,
+          editing: false
+        })));
+        setToastMessage('Invoice processed successfully!');
+        setToastType('success');
+        setShowToast(true);
+      } else {
+        throw new Error(data.error || 'Unknown error from API');
+      }
+    } catch (err: any) {
+      setError(err.message || 'An unknown error occurred');
+      setToastMessage('Failed to process invoice');
+      setToastType('error');
+      setShowToast(true);
+      setInvoiceData(null);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Convert file to base64
+  function fileToBase64(file: File): Promise<{ base64Data: string; mimeType: string }> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        const result = reader.result as string;
+        const base64Data = result.split(',')[1];
+        const mimeType = file.type || 'image/png';
+        resolve({ base64Data, mimeType });
+      };
+      reader.onerror = (error) => reject(error);
+    });
+  }
+
+  // Handle file upload
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
+      setError('Please upload an image (PNG, JPG) or PDF file');
+      return;
+    }
+
+    await processFile(file);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
+      setError('Please upload an image (PNG, JPG) or PDF file');
+      return;
+    }
+
+    processFile(file);
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  // Toggle editing mode for line items
+  const toggleEditing = useCallback(() => {
+    setIsEditing(!isEditing);
+    if (!isEditing) {
+      // Enable editing for all items
+      setEditedLineItems(prev => prev.map(item => ({ ...item, editing: true })));
+    } else {
+      // Disable editing and save changes
+      setEditedLineItems(prev => prev.map(item => ({ ...item, editing: false })));
+      // Update the main invoiceData with edited line items
+      setInvoiceData(prev => prev ? { ...prev, lineItems: prev.lineItems.map((item, index) => ({
+        ...editedLineItems[index],
+        description: editedLineItems[index].description,
+        quantity: Number(editedLineItems[index].quantity),
+        price: Number(editedLineItems[index].price),
+        total: Number(editedLineItems[index].total)
+      })) } : null);
+    }
+  }, [isEditing, editedLineItems]);
+
+  // Handle input change in editing mode
+  const handleLineItemChange = (index: number, field: string, value: string) => {
+    setEditedLineItems(prev => {
+      const newItems = [...prev];
+      newItems[index] = { ...newItems[index], [field]: value };
+      return newItems;
+    });
+  };
+
+  // Export to Excel
+  const exportToExcel = useCallback(() => {
+    if (!invoiceData) return;
+
+    try {
+      // Prepare data for worksheet
+      const wsData: any[][] = [
+        ['Vendor Name', invoiceData.vendorName],
+        ['GSTIN', invoiceData.gstin],
+        ['Invoice Number', invoiceData.invoiceNumber],
+        ['Currency', invoiceData.currency],
+        ['Invoice Date', invoiceData.invoiceDate],
+        ['Subtotal', invoiceData.subtotal],
+        ['CGST', invoiceData.cgst],
+        ['SGST', invoiceData.sgst],
+        ['IGST', invoiceData.igst],
+        ['Tax Amount', invoiceData.taxAmount],
+        ['Total Amount', invoiceData.totalAmount],
+        [], // Empty row
+        ['Line Items'],
+        ['Description', 'Quantity', 'Unit Price', 'Total'],
+      ];
+
+      // Add line items
+      invoiceData.lineItems.forEach(item => {
+        wsData.push([item.description, item.quantity, item.price, item.total]);
+      });
+
+      // Create workbook and worksheet
+      const XLSX = require('xlsx');
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Invoice');
+
+      // Generate buffer and download
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([wbout], { type: 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `invoice_${invoiceData.invoiceNumber || Date.now()}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      setToastMessage('Exported to Excel successfully!');
+      setToastType('success');
+      setShowToast(true);
+    } catch (err) {
+      setToastMessage('Export failed');
+      setToastType('error');
+      setShowToast(true);
+    }
+  }, [invoiceData]);
+
+  // Get GSTIN status badge
+  const getGstinStatus = () => {
+    if (!invoiceData?.gstin) return { text: 'Missing', color: 'text-red-400' };
+    // Simple GSTIN validation: 15 characters, alphanumeric
+    const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+    return gstinRegex.test(invoiceData.gstin)
+      ? { text: 'Valid', color: 'text-green-400' }
+      : { text: 'Invalid', color: 'text-red-400' };
+  };
+
+  // Format currency symbol
+  const getCurrencySymbol = (currency: string) => {
+    switch (currency.toUpperCase()) {
+      case 'USD': return '$';
+      case 'EUR': return '€';
+      case 'GBP': return '£';
+      case 'JPY': return '¥';
+      default: return '₹'; // Default to INR
+    }
+  };
+
+  return (
+    <div className="min-h-[100vh] bg-gradient-to-b from-slate-950 to-slate-900 text-white relative overflow-hidden">
+      {/* Animated background */}
+      <div className="absolute inset-0 -z-0">
+        <div className="relative h-full w-full">
+          <svg className="absolute -top-10 left-1/2 -z-0 -translate-x-1/2 w-[30rem] h-[30rem]" fill="none" viewBox="0 0 100 100">
+            <path strokeOpacity="0.03" stroke="indigo-400" strokeWidth="15" d="M50,50 m-30,0 a30,30 0 1,1 60,0 a30,30 0 1,1 -60,0" />
+          </svg>
+          <svg className="absolute bottom-10 right-1/2 -z-0 translate-x-1/2 w-[25rem] h-[25rem]" fill="none" viewBox="0 0 100 100">
+            <path strokeOpacity="0.02" stroke="slate-400" strokeWidth="10" d="M20,80 Q40,20 60,80 T100,80" />
+          </svg>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="relative z-10 flex min-h-[100vh] flex-col items-center px-6 py-16">
+        {/* Header */}
+        <div className="mb-8 text-center">
+          <h1 className="mb-4 bg-gradient-to-r from-indigo-400 to-slate-400 bg-clip-text text-transparent text-3xl md:text-4xl font-bold">
+            DocExtract AI Dashboard
+          </h1>
+          <p className="max-w-xl text-slate-300 text-lg">
+            Upload invoices for AI-powered extraction with real-time GST compliance validation
+          </p>
+        </div>
+
+        {/* Toast Notification */}
+        {showToast && (
+          <div className="absolute top-4 right-4 z-50 flex items-center space-x-3 rounded-lg px-4 py-2 text-sm font-medium
+            ${toastType === 'success' ? 'bg-green-900/50 border border-green-500/50 text-green-400' : 'bg-red-900/50 border border-red-500/50 text-red-400'}
+            backdrop-blur-sm shadow-lg transform transition-all duration-300 ease-in-out
+            ${showToast ? 'translate-y-0 opacity-100' : 'translate-y-[-100%] opacity-0'}"
+          >
+            <svg className="flex-shrink-0 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              {toastType === 'success' ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.314 8.235m2.936-1.504A5.986 5.986 0 005.924 5.095a5.986 5.986 0 00-2.13 4.139a5.972 5.972 0 001.305 7.514l1.003.877"></path>
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"></path>
+              )}
+            </svg>
+            <span>{toastMessage}</span>
+          </div>
+        )}
+
+        {/* Error Message */}
+        {error && (
+          <div className="mb-6 w-full max-w-2xl bg-red-900/50 border border-red-500/50 rounded-xl px-4 py-3 text-red-400 text-sm backdrop-blur-sm">
+            {error}
+          </div>
+        )}
+
+        {/* Main Content Split View */}
+        {invoiceData ? (
+          <div className="w-full max-w-7xl grid gap-8">
+            {/* Left Column: Upload Zone & Preview */}
+            <div className="relative group bg-slate-900/50 backdrop-blur-sm rounded-2xl border border-slate-800/50 hover:border-indigo-500/50 p-6 transition-all duration-300 ease-in-out hover:shadow-lg hover:shadow-indigo-500/10">
+              <div className="absolute inset-0 -z-0 rounded-2xl bg-gradient-to-br from-indigo-900/5 to-slate-900/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+
+              {/* Upload Area */}
+              {!isProcessing && !uploadedFilePreview ? (
+                <div className="relative z-0 text-center py-12">
+                  <div className="relative z-0 flex h-14 w-14 items-center justify-center mb-4 bg-indigo-500/10 rounded-lg">
+                    <svg className="flex-shrink-0 h-6 w-6 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4a2 2 0 012-2h2.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01-.293.707V14a2 2 0 01-2 2h-3.172a1 1 0 01-.707-.293L7 11V4z"></path>
+                    </svg>
+                  </div>
+                  <h3 className="mb-3 text-indigo-300 font-semibold">Drop Invoice Here</h3>
+                  <p className="text-slate-400 max-w-md">
+                    Drag & drop your invoice image or PDF, or click to select a file
+                  </p>
+                  <div className="mt-4 flex items-center justify-center space-x-3">
+                    <input
+                      type="file"
+                      accept=".png,.jpg,.jpeg,.pdf"
+                      className="hidden"
+                      onChange={handleFileChange}
+                    />
+                    <label
+                      htmlFor="file-upload"
+                      className="flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-all duration-200"
+                    >
+                      Browse Files
+                    </label>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* File Preview */}
+                  <div className="relative z-0 mb-4">
+                    {uploadedFilePreview && uploadedFilePreview.startsWith('data:image') ? (
+                      <img
+                        src={uploadedFilePreview}
+                        alt="Invoice preview"
+                        className="rounded-xl border border-slate-700/50 max-w-full h-64 object-contain"
+                      />
+                    ) : (
+                      <div className="flex h-64 items-center justify-center bg-slate-800/50 rounded-xl">
+                        <div className="text-center">
+                          <svg className="flex-shrink-0 h-8 w-8 mb-2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m2 0a2 2 0 110-4m0 0a2 2 0 100-4m-2 4h-2a2 2 0 00-2 2v2a2 2 0 002 2h2zm0 0v2a2 2 0 100 4m0-6a2 2 0 110-4m0 0a2 2 0 100-4m-2 4h-2a2 2 0 00-2 2v2a2 2 0 002 2h2z"></path>
+                          </svg>
+                          <p className="text-slate-400">{uploadedFileName || 'Document Preview'}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Progress Bar */}
+                  {isProcessing && (
+                    <div className="mb-4">
+                      <div className="w-full bg-slate-800/50 rounded-full h-2.5 overflow-hidden">
+                        <div
+                          className={`bg-gradient-to-r from-indigo-400 to-slate-400 h-2.5 transition-all duration-300 ease-in-out w-[${progress}%]`}
+                        ></div>
+                      </div>
+                      <p className="mt-1 text-xs text-slate-400 text-right">
+                        Processing... {Math.round(profit)}%
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Action Buttons */}
+                  <div className="mt-4 flex flex-col sm:flex-row sm:space-x-3">
+                    {(!isProcessing && uploadedFilePreview) && (
+                      <button
+                        onClick={() => {
+                          // Reset upload state
+                          setUploadedFileName(null);
+                          setUploadedFilePreview(null);
+                          setInvoiceData(null);
+                          setEditedLineItems([]);
+                        }}
+                        className="flex-1 px-4 py-2 bg-slate-800/50 hover:bg-slate-700/50 text-slate-300 rounded-lg transition-all duration-200"
+                      >
+                        Remove File
+                      </button>
+                    )}
+                    {(!isProcessing && uploadedFilePreview) && (
+                      <button
+                        onClick={toggleEditing}
+                        className={`flex-1 px-4 py-2 ${isEditing ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 hover:bg-slate-700/50 text-slate-300'} rounded-lg font-medium transition-all duration-200`}
+                      >
+                        {isEditing ? 'Save Changes' : 'Edit Line Items'}
+                      </button>
+                    )}
+                    {(!isProcessing && uploadedFilePreview) && (
+                      <button
+                        onClick={exportToExcel}
+                        className="flex-1 px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-all duration-200"
+                      >
+                        Export to Excel
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {/* Processing State */}
+              {isProcessing && !uploadedFilePreview && (
+                <div className="relative z-0 flex flex-col items-center justify-center py-12">
+                  <div className="relative z-0 flex h-14 w-14 items-center justify-center mb-4 bg-indigo-500/10 rounded-lg animate-pulse">
+                    <svg className="flex-shrink-0 h-6 w-6 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path className="animate-spin" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 1118 0z"></path>
+                    </svg>
+                  </div>
+                  <h3 className="mb-3 text-indigo-300 font-semibold">Processing Invoice...</h3>
+                  <p className="text-slate-400">
+                    Our AI is analyzing the document and extracting structured data
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Right Column: Results Card */}
+            <div className="relative group bg-slate-900/50 backdrop-blur-sm rounded-2xl border border-slate-800/50 hover:border-indigo-500/50 p-6 transition-all duration-300 ease-in-out hover:shadow-lg hover:shadow-indigo-500/10">
+              <div className="absolute inset-0 -z-0 rounded-2xl bg-gradient-to-br from-indigo-900/5 to-slate-900/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+
+              {/* Header */}
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-indigo-300 font-semibold">Extraction Results</h2>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => setActiveTab('summary')}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-lg ${activeTab === 'summary' ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'} transition-all duration-200`}
+                  >
+                    Summary
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('lineItems')}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-lg ${activeTab === 'lineItems' ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'} transition-all duration-200`}
+                  >
+                    Line Items
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('rawJson')}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-lg ${activeTab === 'rawJson' ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'} transition-all duration-200`}
+                  >
+                    Raw JSON
+                  </button>
+                </div>
+              </div>
+
+              {/* Tab Content */}
+              {activeTab === 'summary' && (
+                <div className="space-y-4">
+                  {/* Vendor Information */}
+                  <div className="border-b border-slate-700 pb-3">
+                    <h3 className="mb-2 text-indigo-300 font-semibold">Vendor Information</h3>
+                    <div className="grid gap-2 sm:grid-cols-2 text-slate-400">
+                      <div><span className="font-medium">Name:</span> {invoiceData.vendorName}</div>
+                      <div><span className="font-medium">GSTIN:</span> {invoiceData.gstin}</div>
+                      <div><span className="font-medium">Invoice #:</span> {invoiceData.invoiceNumber}</div>
+                      <div><span className="font-medium">Currency:</span> {invoiceData.currency}</div>
+                      <div><span className="font-medium">Date:</span> {invoiceData.invoiceDate}</div>
+                      <div>
+                        <span className="font-medium">GST Status:</span>
+                        <span className={`px-2 py-0.5 text-xs rounded-full ${getGstinStatus().color}`}>
+                          {getGstinStatus().text}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Financial Summary */}
+                  <div className="border-b border-slate-700 pb-3">
+                    <h3 className="mb-2 text-indigo-300 font-semibold">Financial Summary</h3>
+                    <div className="grid gap-2 sm:grid-cols-3 text-slate-400">
+                      <div><span className="font-medium">Subtotal:</span> {getCurrencySymbol(invoiceData.currency)} {invoiceData.subtotal.toFixed(2)}</div>
+                      <div><span className="font-medium">CGST:</span> {getCurrencySymbol(invoiceData.currency)} {invoiceData.cgst.toFixed(2)}</div>
+                      <div><span className="font-medium">SGST:</span> {getCurrencySymbol(invoiceData.currency)} {invoiceData.sgst.toFixed(2)}</div>
+                      <div><span className="font-medium">IGST:</span> {getCurrencySymbol(invoiceData.currency)} {invoiceData.igst.toFixed(2)}</div>
+                      <div><span className="font-medium">Total Tax:</span> {getCurrencySymbol(invoiceData.currency)} {invoiceData.taxAmount.toFixed(2)}</div>
+                      <div><span className="font-medium">Total Amount:</span> {getCurrencySymbol(invoiceData.currency)} {invoiceData.totalAmount.toFixed(2)}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'lineItems' && (
+                <div className="space-y-4">
+                  <h3 className="mb-3 text-indigo-300 font-semibold">Line Items</h3>
+                  {invoiceData.lineItems.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full border-collapse border border-slate-700">
+                        <thead>
+                          <tr className="bg-slate-800/50">
+                            <th className="px-4 py-3 text-left text-sm font-medium text-slate-400">
+                              Description
+                            </th>
+                            <th className="px-4 py-3 text-left text-sm font-medium text-slate-400">
+                              Quantity
+                            </th>
+                            <th className="px-4 py-3 text-left text-sm font-medium text-slate-400">
+                              Unit Price
+                            </th>
+                            <th className="px-4 py-3 text-left text-sm font-medium text-slate-400">
+                              Total
+                            </th>
+                            {!isEditing && (
+                              <th className="px-4 py-3 text-left text-sm font-medium text-slate-400">
+                                Actions
+                              </th>
+                            )}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-700">
+                          {invoiceData.lineItems.map((item, index) => (
+                            <tr key={index} className={`hover:bg-slate-800/20 transition-all duration-200 ${isEditing ? 'cursor-pointer' : ''}`}>
+                              {isEditing ? (
+                                <>
+                                  <td className="px-4 py-3">
+                                    <input
+                                      type="text"
+                                      value={editedLineItems[index].description}
+                                      onChange={(e) => handleLineItemChange(index, 'description', e.target.value)}
+                                      className="w-full px-3 py-1 bg-slate-800/50 border border-slate-700 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                    />
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <input
+                                      type="number"
+                                      value={editedLineItems[index].quantity || ''}
+                                      onChange={(e) => handleLineItemChange(index, 'quantity', e.target.value)}
+                                      className="w-full px-3 py-1 bg-slate-800/50 border border-slate-700 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                    />
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <input
+                                      type="number"
+                                      value={editedLineItems[index].price || ''}
+                                      onChange={(e) => handleLineItemChange(index, 'price', e.target.value)}
+                                      className="w-full px-3 py-1 bg-slate-800/50 border border-slate-700 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                    />
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <input
+                                      type="number"
+                                      value={editedLineItems[index].total || ''}
+                                      onChange={(e) => handleLineItemChange(index, 'total', e.target.value)}
+                                      className="w-full px-3 py-1 bg-slate-800/50 border border-slate-700 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                    />
+                                  </td>
+                                </>
+                              ) : (
+                                <>
+                                  <td className="px-4 py-3">{item.description}</td>
+                                  <td className="px-4 py-3">{item.quantity}</td>
+                                  <td className="px-4 py-3">{getCurrencySymbol(invoiceData.currency)} {Number(item.price).toFixed(2)}</td>
+                                  <td className="px-4 py-3">{getCurrencySymbol(invoiceData.currency)} {Number(item.total).toFixed(2)}</td>
+                                  <td className="px-4 py-3 text-center">
+                                    <button
+                                      onClick={() => {
+                                        // In a real app, this might open a detail view
+                                      }}
+                                      className="text-xs text-indigo-400 hover:text-indigo-300"
+                                    >
+                                      <svg className="flex-shrink-0 h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 002-2H9z"></path>
+                                      </svg>
+                                    </button>
+                                  </td>
+                                </>
+                              )}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="text-slate-400 text-center py-8">No line items found</p>
+                  )}
+                </div>
+              )}
+
+              {activeTab === 'rawJson' && (
+                <div className="h-96 overflow-auto bg-slate-800/50 rounded-lg p-3 text-xs font-mono text-slate-300">
+                  <pre className="whitespace-pre-wrap">{JSON.stringify(invoiceData, null, 2)}</pre>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          /* Empty State - Upload Zone */
+          <div className="w-full max-w-4xl">
+            <div className="relative group bg-slate-900/50 backdrop-blur-sm rounded-2xl border border-slate-800/50 hover:border-indigo-500/50 p-12 text-center transition-all duration-300 ease-in-out hover:shadow-lg hover:shadow-indigo-500/10">
+              <div className="absolute inset-0 -z-0 rounded-2xl bg-gradient-to-br from-indigo-900/5 to-slate-900/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <div className="relative z-0">
+                <div className="flex h-16 w-16 items-center justify-center mb-6 bg-indigo-500/10 rounded-lg">
+                  <svg className="flex-shrink-0 h-8 w-8 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4a2 2 0 012-2h2.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01-.293.707V14a2 2 0 01-2 2h-3.172a1 1 0 01-.707-.293L7 11V4z"></path>
+                  </svg>
+                </div>
+                <h2 className="mb-4 text-indigo-300 font-semibold">Ready to Extract Invoice Data</h2>
+                <p className="max-w-xl text-slate-400 mb-6">
+                  Drag & drop an invoice image or PDF below, or click to select a file to begin AI-powered extraction.
+                </p>
+                <div className="flex flex-col sm:flex-row sm:space-x-3">
+                  <input
+                    type="file"
+                    accept=".png,.jpg,.jpeg,.pdf"
+                    className="hidden"
+                    id="file-upload"
+                    onChange={handleFileChange}
+                  />
+                  <label
+                    htmlFor="file-upload"
+                    className="flex items-center px-6 py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-all duration-200"
+                  >
+                    Select Invoice File
+                  </label>
+                </div>
+                <p className="mt-4 text-slate-500 text-sm">
+                  Supported formats: PNG, JPG, PDF • Max size: 10MB
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Footer */}
+        <div className="mt-12 text-center text-slate-500 text-sm">
+          <p>
+            DocExtract AI uses advanced machine learning to extract structured data from invoices.
+            For best results, ensure images are clear and text is legible.
+          </p>
+          <p className="mt-2">
+            © {new Date().getFullYear()} DocExtract AI. All rights reserved.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
