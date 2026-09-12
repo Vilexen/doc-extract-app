@@ -37,9 +37,6 @@ export default function Dashboard() {
   const [isEditing, setIsEditing] = useState(false);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [uploadedFilePreview, setUploadedFilePreview] = useState<string | null>(null);
-  const [progress, setProgress] = useState(0);
-  const progressRef = useRef<number>(0);
-
   // Toast timeout
   useEffect(() => {
     if (showToast) {
@@ -49,22 +46,6 @@ export default function Dashboard() {
       return () => clearTimeout(timer);
     }
   }, [showToast]);
-
-  // Simulate progress during processing
-  useEffect(() => {
-    if (isProcessing) {
-      const interval = setInterval(() => {
-        if (progressRef.current < 95) {
-          progressRef.current += Math.random() * 3;
-          setProgress(Math.min(progressRef.current, 95));
-        }
-      }, 100);
-      return () => clearInterval(interval);
-    } else {
-      progressRef.current = 0;
-      setProgress(0);
-    }
-  }, [isProcessing]);
 
   // Process file
   const processFile = async (file: File) => {
@@ -329,7 +310,7 @@ export default function Dashboard() {
 
               {/* Upload Area */}
               {!isProcessing && !uploadedFilePreview ? (
-                <div className="relative z-0 text-center py-12">
+                <div className="relative z-0 text-center py-12" onClick={() => document.getElementById('file-upload')?.click()} onDragOver={handleDragOver} onDrop={handleDrop}>
                   <div className="relative z-0 flex h-14 w-14 items-center justify-center mb-4 bg-indigo-500/10 rounded-lg">
                     <svg className="flex-shrink-0 h-6 w-6 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4a2 2 0 012-2h2.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01-.293.707V14a2 2 0 01-2 2h-3.172a1 1 0 01-.707-.293L7 11V4z"></path>
@@ -344,6 +325,7 @@ export default function Dashboard() {
                       type="file"
                       accept=".png,.jpg,.jpeg,.pdf"
                       className="hidden"
+                      id="file-upload"
                       onChange={handleFileChange}
                     />
                     <label
@@ -376,17 +358,22 @@ export default function Dashboard() {
                     )}
                   </div>
 
-                  {/* Progress Bar */}
+                  {/* Processing Steps */}
                   {isProcessing && (
-                    <div className="mb-4">
-                      <div className="w-full bg-slate-800/50 rounded-full h-2.5 overflow-hidden">
-                        <div
-                          className={`bg-gradient-to-r from-indigo-400 to-slate-400 h-2.5 transition-all duration-300 ease-in-out w-[${progress}%]`}
-                        ></div>
+                    <div className="space-y-2 text-center">
+                      <p className="text-indigo-300 font-medium">Processing Invoice...</p>
+                      <div className="flex items-center space-x-2 text-slate-400">
+                        <div className="w-2 h-2 bg-indigo-400 rounded-full animate-pulse"></div>
+                        <span>Reading document...</span>
                       </div>
-                      <p className="mt-1 text-xs text-slate-400 text-right">
-                        Processing... {Math.round(progress)}%
-                      </p>
+                      <div className="flex items-center space-x-2 text-slate-400">
+                        <div className="w-2 h-2 bg-indigo-400 rounded-full animate-pulse"></div>
+                        <span>Analyzing with AI...</span>
+                      </div>
+                      <div className="flex items-center space-x-2 text-slate-400">
+                        <div className="w-2 h-2 bg-indigo-400 rounded-full animate-pulse"></div>
+                        <span>Extracting line items & totals...</span>
+                      </div>
                     </div>
                   )}
 
@@ -434,10 +421,21 @@ export default function Dashboard() {
                       <path className="animate-spin" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 1118 0z"></path>
                     </svg>
                   </div>
-                  <h3 className="mb-3 text-indigo-300 font-semibold">Processing Invoice...</h3>
-                  <p className="text-slate-400">
-                    Our AI is analyzing the document and extracting structured data
-                  </p>
+                  <div className="space-y-2 text-center">
+                    <p className="text-indigo-300 font-medium">Processing Invoice...</p>
+                    <div className="flex items-center space-x-2 text-slate-400">
+                      <div className="w-2 h-2 bg-indigo-400 rounded-full animate-pulse"></div>
+                      <span>Reading document...</span>
+                    </div>
+                    <div className="flex items-center space-x-2 text-slate-400">
+                      <div className="w-2 h-2 bg-indigo-400 rounded-full animate-pulse"></div>
+                      <span>Analyzing with AI...</span>
+                    </div>
+                    <div className="flex items-center space-x-2 text-slate-400">
+                      <div className="w-2 h-2 bg-indigo-400 rounded-full animate-pulse"></div>
+                      <span>Extracting line items & totals...</span>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
