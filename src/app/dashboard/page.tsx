@@ -472,21 +472,21 @@ export default function Dashboard() {
                   <button
                     onClick={() => setActiveTab('summary')}
                     disabled={!invoiceData || isProcessing}
-                    className={`px-3 py-1.5 text-sm font-medium rounded-lg ${(!invoiceData || isProcessing) ? 'opacity-50 cursor-not-allowed' : `${activeTab === 'summary' ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'`} transition-all duration-200`}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-lg ${(!invoiceData || isProcessing) ? 'opacity-50 cursor-not-allowed' : \`${activeTab === 'summary' ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'\`} transition-all duration-200`}
                   >
                     Summary
                   </button>
                   <button
                     onClick={() => setActiveTab('lineItems')}
                     disabled={!invoiceData || isProcessing}
-                    className={`px-3 py-1.5 text-sm font-medium rounded-lg ${(!invoiceData || isProcessing) ? 'opacity-50 cursor-not-allowed' : `${activeTab === 'lineItems' ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'`} transition-all duration-200`}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-lg ${(!invoiceData || isProcessing) ? 'opacity-50 cursor-not-allowed' : \`${activeTab === 'lineItems' ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'\`} transition-all duration-200`}
                   >
                     Line Items
                   </button>
                   <button
                     onClick={() => setActiveTab('rawJson')}
                     disabled={!invoiceData || isProcessing}
-                    className={`px-3 py-1.5 text-sm font-medium rounded-lg ${(!invoiceData || isProcessing) ? 'opacity-50 cursor-not-allowed' : `${activeTab === 'rawJson' ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'`} transition-all duration-200`}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-lg ${(!invoiceData || isProcessing) ? 'opacity-50 cursor-not-allowed' : \`${activeTab === 'rawJson' ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'\`} transition-all duration-200`}
                   >
                     Raw JSON
                   </button>
