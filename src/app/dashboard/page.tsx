@@ -130,7 +130,7 @@ export default function Dashboard() {
   const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    const file = e.dataTransfer.files[0];
+    const file = e.dataTransfer.files?.[0];
     if (!file) return;
 
     // Validate file type
@@ -334,7 +334,7 @@ export default function Dashboard() {
 
               {/* Upload Area */}
               {!isProcessing && !uploadedFilePreview ? (
-                <div className="relative z-0 text-center py-12 cursor-pointer" onClick={() => document.getElementById('file-upload')?.click()} onDragOver={handleDragOver} onDrop={handleDrop}>
+                <div className="relative z-0 text-center py-12 cursor-pointer" onClick={() => document.getElementById('file-upload')?.click()} onDragOver={handleDragOver} onDragEnter={handleDragOver} onDragLeave={handleDragOver} onDrop={handleDrop}>
                   <div className="relative z-0 flex h-14 w-14 items-center justify-center mb-4 bg-indigo-500/10 rounded-lg">
                     <svg className="flex-shrink-0 h-6 w-6 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4a2 2 0 012-2h2.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01-.293.707V14a2 2 0 01-2 2h-3.172a1 1 0 01-.707-.293L7 11V4z"></path>
@@ -412,21 +412,21 @@ export default function Dashboard() {
     setEditedLineItems([]);
   }}
   disabled={!uploadedFilePreview}
-  className={`flex-1 px-4 py-2 ${!uploadedFilePreview ? 'opacity-50 cursor-not-allowed' : 'bg-slate-800/50 hover:bg-slate-700/50 text-slate-300'} rounded-lg transition-all duration-200`}
+  className={`relative z-20 flex-1 px-4 py-2 ${!uploadedFilePreview ? 'opacity-50 cursor-not-allowed' : 'bg-slate-800/50 hover:bg-slate-700/50 text-slate-300'} rounded-lg transition-all duration-200`}
 >
   Remove File
 </button>
                     <button
   onClick={toggleEditing}
   disabled={!uploadedFilePreview || isProcessing}
-  className={`flex-1 px-4 py-2 ${!uploadedFilePreview || isProcessing ? 'opacity-50 cursor-not-allowed' : isEditing ? 'bg-indigo-600 text-white font-medium' : 'bg-slate-800/50 hover:bg-slate-700/50 text-slate-300 font-medium'} rounded-lg transition-all duration-200`}
+  className={`relative z-20 flex-1 px-4 py-2 ${!uploadedFilePreview || isProcessing ? 'opacity-50 cursor-not-allowed' : isEditing ? 'bg-indigo-600 text-white font-medium' : 'bg-slate-800/50 hover:bg-slate-700/50 text-slate-300 font-medium'} rounded-lg transition-all duration-200`}
 >
   {isEditing ? 'Save Changes' : 'Edit Line Items'}
 </button>
                     <button
   onClick={exportToExcel}
   disabled={!invoiceData || isProcessing}
-  className={`flex-1 px-4 py-2 ${!invoiceData || isProcessing ? 'opacity-50 cursor-not-allowed' : 'bg-indigo-600 text-white font-medium hover:bg-indigo-700'} rounded-lg transition-all duration-200`}
+  className={`relative z-20 flex-1 px-4 py-2 ${!invoiceData || isProcessing ? 'opacity-50 cursor-not-allowed' : 'bg-indigo-600 text-white font-medium hover:bg-indigo-700'} rounded-lg transition-all duration-200`}
 >
   Export to Excel
 </button>
@@ -472,21 +472,21 @@ export default function Dashboard() {
                   <button
                     onClick={() => setActiveTab('summary')}
                     disabled={!invoiceData || isProcessing}
-                    className={`px-3 py-1.5 text-sm font-medium rounded-lg ${(!invoiceData || isProcessing) ? 'opacity-50 cursor-not-allowed' : activeTab === 'summary' ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'} transition-all duration-200`}
+                    className={`relative z-20 px-3 py-1.5 text-sm font-medium rounded-lg ${(!invoiceData || isProcessing) ? 'opacity-50 cursor-not-allowed' : activeTab === 'summary' ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'} transition-all duration-200`}
                   >
                     Summary
                   </button>
                   <button
                     onClick={() => setActiveTab('lineItems')}
                     disabled={!invoiceData || isProcessing}
-                    className={`px-3 py-1.5 text-sm font-medium rounded-lg ${(!invoiceData || isProcessing) ? 'opacity-50 cursor-not-allowed' : activeTab === 'lineItems' ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'} transition-all duration-200`}
+                    className={`relative z-20 px-3 py-1.5 text-sm font-medium rounded-lg ${(!invoiceData || isProcessing) ? 'opacity-50 cursor-not-allowed' : activeTab === 'lineItems' ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'} transition-all duration-200`}
                   >
                     Line Items
                   </button>
                   <button
                     onClick={() => setActiveTab('rawJson')}
                     disabled={!invoiceData || isProcessing}
-                    className={`px-3 py-1.5 text-sm font-medium rounded-lg ${(!invoiceData || isProcessing) ? 'opacity-50 cursor-not-allowed' : activeTab === 'rawJson' ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'} transition-all duration-200`}
+                    className={`relative z-20 px-3 py-1.5 text-sm font-medium rounded-lg ${(!invoiceData || isProcessing) ? 'opacity-50 cursor-not-allowed' : activeTab === 'rawJson' ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'} transition-all duration-200`}
                   >
                     Raw JSON
                   </button>
@@ -631,7 +631,7 @@ export default function Dashboard() {
                     <button
                       onClick={copyJSON}
                       disabled={!invoiceData || isProcessing}
-                      className={`px-3 py-1 bg-indigo-600 text-white text-sm font-medium rounded-lg ${!invoiceData || isProcessing ? 'opacity-50 cursor-not-allowed' : 'hover:bg-indigo-700'} transition-all duration-200`}
+                      className={`relative z-20 px-3 py-1 bg-indigo-600 text-white text-sm font-medium rounded-lg ${!invoiceData || isProcessing ? 'opacity-50 cursor-not-allowed' : 'hover:bg-indigo-700'} transition-all duration-200`}
                     >
                       Copy JSON
                     </button>
