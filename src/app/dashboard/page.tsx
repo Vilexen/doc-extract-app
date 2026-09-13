@@ -42,7 +42,7 @@ export default function Dashboard() {
     if (showToast) {
       const timer = setTimeout(() => {
         setShowToast(false);
-      }, 4000);
+      }, 6000); // Increased from 4000 to 6000ms for better readability
       return () => clearTimeout(timer);
     }
   }, [showToast]);
@@ -52,6 +52,7 @@ export default function Dashboard() {
     setError(null);
     setIsProcessing(true);
     setUploadedFileName(file.name);
+    setUploadedFilePreview(null); // Clear preview immediately to reset UI state
 
     // Create preview
     const reader = new FileReader();
@@ -150,25 +151,30 @@ export default function Dashboard() {
   const toggleEditing = useCallback(() => {
     setIsEditing(!isEditing);
     if (!isEditing) {
-      // Enable editing for all items
-      setEditedLineItems(prev => prev.map(item => ({ ...item, editing: true })));
+      // Enable editing for all items - copy from invoiceData
+      setEditedLineItems(invoiceData?.lineItems?.map((item: LineItem) => ({
+        ...item,
+        editing: true
+      })) ?? []);
     } else {
       // Disable editing and save changes
       setEditedLineItems(prev => prev.map(item => ({ ...item, editing: false })));
       // Update the main invoiceData with edited line items
       setInvoiceData(prev => prev ? { ...prev, lineItems: prev.lineItems.map((item: LineItem, index: number) => ({
-        ...editedLineItems[index],
-        description: editedLineItems[index].description,
-        quantity: Number(editedLineItems[index].quantity),
-        price: Number(editedLineItems[index].price),
-        total: Number(editedLineItems[index].total)
+        ...item,
+        description: editedLineItems[index]?.description ?? item.description,
+        quantity: Number(editedLineItems[index]?.quantity ?? item.quantity),
+        price: Number(editedLineItems[index]?.price ?? item.price),
+        total: Number(editedLineItems[index]?.total ?? item.total)
       })) } : null);
     }
-  }, [isEditing, editedLineItems]);
+  }, [isEditing, editedLineItems, invoiceData]);
 
   // Handle input change in editing mode
   const handleLineItemChange = (index: number, field: string, value: string) => {
     setEditedLineItems(prev => {
+      // Ensure we don't mutate out of bounds
+      if (index < 0 || index >= prev.length) return prev;
       const newItems = [...prev];
       newItems[index] = { ...newItems[index], [field]: value };
       return newItems;
@@ -297,7 +303,7 @@ export default function Dashboard() {
         {/* Toast Notification */}
         {showToast && (
           <div className="absolute top-4 right-4 z-50 flex items-center space-x-3 rounded-lg px-4 py-2 text-sm font-medium
-            ${toastType === 'success' ? 'bg-green-900/50 border border-green-500/50 text-green-400' : 'bg-red-900/50 border border-red-500/50 text-red-400'}
+            ${toastType === 'success' ? 'bg-green-900/70 border border-green-500/50 text-green-400' : 'bg-red-900/70 border border-red-500/50 text-red-400'}
             backdrop-blur-sm shadow-lg transform transition-all duration-300 ease-in-out
             ${showToast ? 'translate-y-0 opacity-100' : 'translate-y-[-100%] opacity-0'}"
           >
@@ -397,36 +403,33 @@ export default function Dashboard() {
 
                   {/* Action Buttons */}
                   <div className="mt-4 flex flex-col sm:flex-row sm:space-x-3">
-                    {(!isProcessing && uploadedFilePreview) && (
-                      <button
-                        onClick={() => {
-                          // Reset upload state
-                          setUploadedFileName(null);
-                          setUploadedFilePreview(null);
-                          setInvoiceData(null);
-                          setEditedLineItems([]);
-                        }}
-                        className="flex-1 px-4 py-2 bg-slate-800/50 hover:bg-slate-700/50 text-slate-300 rounded-lg cursor-pointer transition-all duration-200"
-                      >
-                        Remove File
-                      </button>
-                    )}
-                    {(!isProcessing && uploadedFilePreview) && (
-                      <button
-                        onClick={toggleEditing}
-                        className={`flex-1 px-4 py-2 ${isEditing ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 hover:bg-slate-700/50 text-slate-300'} rounded-lg font-medium cursor-pointer transition-all duration-200`}
-                      >
-                        {isEditing ? 'Save Changes' : 'Edit Line Items'}
-                      </button>
-                    )}
-                    {(!isProcessing && uploadedFilePreview) && (
-                      <button
-                        onClick={exportToExcel}
-                        className="flex-1 px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 cursor-pointer transition-all duration-200"
-                      >
-                        Export to Excel
-                      </button>
-                    )}
+                    <button
+  onClick={() => {
+    // Reset upload state
+    setUploadedFileName(null);
+    setUploadedFilePreview(null);
+    setInvoiceData(null);
+    setEditedLineItems([]);
+  }}
+  disabled={!uploadedFilePreview}
+  className={`flex-1 px-4 py-2 ${!uploadedFilePreview ? 'opacity-50 cursor-not-allowed' : 'bg-slate-800/50 hover:bg-slate-700/50 text-slate-300'} rounded-lg transition-all duration-200`}
+>
+  Remove File
+</button>
+                    <button
+  onClick={toggleEditing}
+  disabled={!uploadedFilePreview || isProcessing}
+  className={`flex-1 px-4 py-2 ${!uploadedFilePreview || isProcessing ? 'opacity-50 cursor-not-allowed' : ${isEditing ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 hover:bg-slate-700/50 text-slate-300'} font-medium} rounded-lg transition-all duration-200`}
+>
+  {isEditing ? 'Save Changes' : 'Edit Line Items'}
+</button>
+                    <button
+  onClick={exportToExcel}
+  disabled={!invoiceData || isProcessing}
+  className={`flex-1 px-4 py-2 ${!invoiceData || isProcessing ? 'opacity-50 cursor-not-allowed' : 'bg-indigo-600 text-white font-medium hover:bg-indigo-700'} rounded-lg transition-all duration-200`}
+>
+  Export to Excel
+</button>
                   </div>
                 </>
               )}
@@ -468,19 +471,22 @@ export default function Dashboard() {
                 <div className="flex space-x-2">
                   <button
                     onClick={() => setActiveTab('summary')}
-                    className={`px-3 py-1.5 text-sm font-medium rounded-lg ${activeTab === 'summary' ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'} cursor-pointer transition-all duration-200`}
+                    disabled={!invoiceData || isProcessing}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-lg ${(!invoiceData || isProcessing) ? 'opacity-50 cursor-not-allowed' : ${activeTab === 'summary' ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'}} transition-all duration-200`}
                   >
                     Summary
                   </button>
                   <button
                     onClick={() => setActiveTab('lineItems')}
-                    className={`px-3 py-1.5 text-sm font-medium rounded-lg ${activeTab === 'lineItems' ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'} cursor-pointer transition-all duration-200`}
+                    disabled={!invoiceData || isProcessing}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-lg ${(!invoiceData || isProcessing) ? 'opacity-50 cursor-not-allowed' : ${activeTab === 'lineItems' ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'}} transition-all duration-200`}
                   >
                     Line Items
                   </button>
                   <button
                     onClick={() => setActiveTab('rawJson')}
-                    className={`px-3 py-1.5 text-sm font-medium rounded-lg ${activeTab === 'rawJson' ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'} cursor-pointer transition-all duration-200`}
+                    disabled={!invoiceData || isProcessing}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-lg ${(!invoiceData || isProcessing) ? 'opacity-50 cursor-not-allowed' : ${activeTab === 'rawJson' ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'}} transition-all duration-200`}
                   >
                     Raw JSON
                   </button>
@@ -624,7 +630,8 @@ export default function Dashboard() {
                   <div className="flex justify-end mb-2">
                     <button
                       onClick={copyJSON}
-                      className="px-3 py-1 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 cursor-pointer transition-all duration-200"
+                      disabled={!invoiceData || isProcessing}
+                      className={`px-3 py-1 bg-indigo-600 text-white text-sm font-medium rounded-lg ${!invoiceData || isProcessing ? 'opacity-50 cursor-not-allowed' : 'hover:bg-indigo-700'} transition-all duration-200`}
                     >
                       Copy JSON
                     </button>
