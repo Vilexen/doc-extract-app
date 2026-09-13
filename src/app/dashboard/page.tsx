@@ -32,17 +32,21 @@ export default function Dashboard() {
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error'>('success');
-  const [activeTab, setActiveTab] = useState<'summary' | 'lineItems' | 'rawJson'>('summary');
-  const [editedLineItems, setEditedLineItems] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<'summary' | 'lineItems'>('summary');
+  const [editedLineItems, setEditedLineItems] = useState<LineItem[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [uploadedFilePreview, setUploadedFilePreview] = useState<string | null>(null);
+
+  // Refs
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // Toast timeout
   useEffect(() => {
     if (showToast) {
       const timer = setTimeout(() => {
         setShowToast(false);
-      }, 6000); // Increased from 4000 to 6000ms for better readability
+      }, 6000);
       return () => clearTimeout(timer);
     }
   }, [showToast]);
@@ -52,7 +56,7 @@ export default function Dashboard() {
     setError(null);
     setIsProcessing(true);
     setUploadedFileName(file.name);
-    setUploadedFilePreview(null); // Clear preview immediately to reset UI state
+    setUploadedFilePreview(null);
 
     // Create preview
     const reader = new FileReader();
@@ -77,10 +81,7 @@ export default function Dashboard() {
 
       if (data.success) {
         setInvoiceData(data.data);
-        setEditedLineItems(data.data.lineItems.map((item: any) => ({
-          ...item,
-          editing: false
-        })));
+        setEditedLineItems(data.data.lineItems);
         setToastMessage('Invoice processed successfully!');
         setToastType('success');
         setShowToast(true);
@@ -113,7 +114,7 @@ export default function Dashboard() {
     });
   }
 
-  // Handle file upload
+  // Handle file upload from input
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -125,9 +126,13 @@ export default function Dashboard() {
     }
 
     await processFile(file);
+
+    // Reset input value
+    e.target.value = '';
   };
 
-  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+  // Handle file drop
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     const file = e.dataTransfer.files?.[0];
@@ -142,7 +147,8 @@ export default function Dashboard() {
     await processFile(file);
   };
 
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+  // Handle drag over
+  const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
   };
@@ -151,32 +157,26 @@ export default function Dashboard() {
   const toggleEditing = useCallback(() => {
     setIsEditing(!isEditing);
     if (!isEditing) {
-      // Enable editing for all items - copy from invoiceData
-      setEditedLineItems(invoiceData?.lineItems?.map((item: LineItem) => ({
-        ...item,
-        editing: true
-      })) ?? []);
+      // Enable editing for all items
+      setEditedLineItems(invoiceData?.lineItems ?? []);
     } else {
       // Disable editing and save changes
-      setEditedLineItems(prev => prev.map(item => ({ ...item, editing: false })));
+      setEditedLineItems(prev => prev.map(item => ({ ...item })));
       // Update the main invoiceData with edited line items
-      setInvoiceData(prev => prev ? { ...prev, lineItems: prev.lineItems.map((item: LineItem, index: number) => ({
-        ...item,
-        description: editedLineItems[index]?.description ?? item.description,
-        quantity: Number(editedLineItems[index]?.quantity ?? item.quantity),
-        price: Number(editedLineItems[index]?.price ?? item.price),
-        total: Number(editedLineItems[index]?.total ?? item.total)
-      })) } : null);
+      setInvoiceData(prev => prev ? { ...prev, lineItems: [...prev.lineItems] } : null);
     }
-  }, [isEditing, editedLineItems, invoiceData]);
+  }, [isEditing, invoiceData?.lineItems]);
 
   // Handle input change in editing mode
-  const handleLineItemChange = (index: number, field: string, value: string) => {
+  const handleLineItemChange = (index: number, field: keyof LineItem, value: string) => {
     setEditedLineItems(prev => {
-      // Ensure we don't mutate out of bounds
       if (index < 0 || index >= prev.length) return prev;
       const newItems = [...prev];
-      newItems[index] = { ...newItems[index], [field]: value };
+      if (field === 'quantity' || field === 'price' || field === 'total') {
+        newItems[index] = { ...newItems[index], [field]: parseFloat(value) || 0 };
+      } else {
+        newItems[index] = { ...newItems[index], [field]: value };
+      }
       return newItems;
     });
   };
@@ -209,7 +209,7 @@ export default function Dashboard() {
         wsData.push([item.description, item.quantity, item.price, item.total]);
       });
 
-      // Create workbook and worksheet
+      // Use require for xlsx to avoid dynamic import issues in Next.js
       const XLSX = require('xlsx');
       const ws = XLSX.utils.aoa_to_sheet(wsData);
       const wb = XLSX.utils.book_new();
@@ -222,13 +222,16 @@ export default function Dashboard() {
       const a = document.createElement('a');
       a.href = url;
       a.download = `invoice_${invoiceData.invoiceNumber || Date.now()}.xlsx`;
+      document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
       setToastMessage('Exported to Excel successfully!');
       setToastType('success');
       setShowToast(true);
     } catch (err) {
+      console.error('Excel export error:', err);
       setToastMessage('Export failed');
       setToastType('error');
       setShowToast(true);
@@ -334,7 +337,14 @@ export default function Dashboard() {
 
               {/* Upload Area */}
               {!isProcessing && !uploadedFilePreview ? (
-                <div className="relative z-0 text-center py-12 cursor-pointer" onClick={() => document.getElementById('file-upload')?.click()} onDragOver={handleDragOver} onDragEnter={handleDragOver} onDragLeave={handleDragOver} onDrop={handleDrop}>
+                <div
+                  className="relative z-0 text-center py-12 cursor-pointer"
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={handleDragOver}
+                  onDragEnter={handleDragOver}
+                  onDragLeave={handleDragOver}
+                  onDrop={handleDrop}
+                >
                   <div className="relative z-0 flex h-14 w-14 items-center justify-center mb-4 bg-indigo-500/10 rounded-lg">
                     <svg className="flex-shrink-0 h-6 w-6 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4a2 2 0 012-2h2.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01-.293.707V14a2 2 0 01-2 2h-3.172a1 1 0 01-.707-.293L7 11V4z"></path>
@@ -349,7 +359,7 @@ export default function Dashboard() {
                       type="file"
                       accept=".png,.jpg,.jpeg,.pdf"
                       className="hidden"
-                      id="file-upload"
+                      ref={fileInputRef}
                       onChange={handleFileChange}
                     />
                     <label
@@ -404,32 +414,32 @@ export default function Dashboard() {
                   {/* Action Buttons */}
                   <div className="mt-4 flex flex-col sm:flex-row sm:space-x-3">
                     <button
-  onClick={() => {
-    // Reset upload state
-    setUploadedFileName(null);
-    setUploadedFilePreview(null);
-    setInvoiceData(null);
-    setEditedLineItems([]);
-  }}
-  disabled={!uploadedFilePreview}
-  className={`relative z-20 flex-1 px-4 py-2 ${!uploadedFilePreview ? 'opacity-50 cursor-not-allowed' : 'bg-slate-800/50 hover:bg-slate-700/50 text-slate-300'} rounded-lg transition-all duration-200`}
->
-  Remove File
-</button>
+                      onClick={() => {
+                        // Reset upload state
+                        setUploadedFileName(null);
+                        setUploadedFilePreview(null);
+                        setInvoiceData(null);
+                        setEditedLineItems([]);
+                      }}
+                      disabled={!uploadedFilePreview}
+                      className={`relative z-20 flex-1 px-4 py-2 ${!uploadedFilePreview ? 'opacity-50 cursor-not-allowed' : 'bg-slate-800/50 hover:bg-slate-700/50 text-slate-300'} rounded-lg transition-all duration-200`}
+                    >
+                      Remove File
+                    </button>
                     <button
-  onClick={toggleEditing}
-  disabled={!uploadedFilePreview || isProcessing}
-  className={`relative z-20 flex-1 px-4 py-2 ${!uploadedFilePreview || isProcessing ? 'opacity-50 cursor-not-allowed' : isEditing ? 'bg-indigo-600 text-white font-medium' : 'bg-slate-800/50 hover:bg-slate-700/50 text-slate-300 font-medium'} rounded-lg transition-all duration-200`}
->
-  {isEditing ? 'Save Changes' : 'Edit Line Items'}
-</button>
+                      onClick={toggleEditing}
+                      disabled={!uploadedFilePreview || isProcessing}
+                      className={`relative z-20 flex-1 px-4 py-2 ${!uploadedFilePreview || isProcessing ? 'opacity-50 cursor-not-allowed' : isEditing ? 'bg-indigo-600 text-white font-medium' : 'bg-slate-800/50 hover:bg-slate-700/50 text-slate-300 font-medium'} rounded-lg transition-all duration-200`}
+                    >
+                      {isEditing ? 'Save Changes' : 'Edit Line Items'}
+                    </button>
                     <button
-  onClick={exportToExcel}
-  disabled={!invoiceData || isProcessing}
-  className={`relative z-20 flex-1 px-4 py-2 ${!invoiceData || isProcessing ? 'opacity-50 cursor-not-allowed' : 'bg-indigo-600 text-white font-medium hover:bg-indigo-700'} rounded-lg transition-all duration-200`}
->
-  Export to Excel
-</button>
+                      onClick={exportToExcel}
+                      disabled={!invoiceData || isProcessing}
+                      className={`relative z-20 flex-1 px-4 py-2 ${!invoiceData || isProcessing ? 'opacity-50 cursor-not-allowed' : 'bg-indigo-600 text-white font-medium hover:bg-indigo-700'} rounded-lg transition-all duration-200`}
+                    >
+                      Export to Excel
+                    </button>
                   </div>
                 </>
               )}
@@ -482,13 +492,6 @@ export default function Dashboard() {
                     className={`relative z-20 px-3 py-1.5 text-sm font-medium rounded-lg ${(!invoiceData || isProcessing) ? 'opacity-50 cursor-not-allowed' : activeTab === 'lineItems' ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'} transition-all duration-200`}
                   >
                     Line Items
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('rawJson')}
-                    disabled={!invoiceData || isProcessing}
-                    className={`relative z-20 px-3 py-1.5 text-sm font-medium rounded-lg ${(!invoiceData || isProcessing) ? 'opacity-50 cursor-not-allowed' : activeTab === 'rawJson' ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'} transition-all duration-200`}
-                  >
-                    Raw JSON
                   </button>
                 </div>
               </div>
@@ -572,7 +575,7 @@ export default function Dashboard() {
                                   <td className="px-4 py-3">
                                     <input
                                       type="number"
-                                      value={editedLineItems[index].quantity || ''}
+                                      value={editedLineItems[index].quantity}
                                       onChange={(e) => handleLineItemChange(index, 'quantity', e.target.value)}
                                       className="w-full px-3 py-1 bg-slate-800/50 border border-slate-700 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                     />
@@ -580,7 +583,7 @@ export default function Dashboard() {
                                   <td className="px-4 py-3">
                                     <input
                                       type="number"
-                                      value={editedLineItems[index].price || ''}
+                                      value={editedLineItems[index].price}
                                       onChange={(e) => handleLineItemChange(index, 'price', e.target.value)}
                                       className="w-full px-3 py-1 bg-slate-800/50 border border-slate-700 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                     />
@@ -588,7 +591,7 @@ export default function Dashboard() {
                                   <td className="px-4 py-3">
                                     <input
                                       type="number"
-                                      value={editedLineItems[index].total || ''}
+                                      value={editedLineItems[index].total}
                                       onChange={(e) => handleLineItemChange(index, 'total', e.target.value)}
                                       className="w-full px-3 py-1 bg-slate-800/50 border border-slate-700 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                     />
@@ -624,21 +627,6 @@ export default function Dashboard() {
                   )}
                 </div>
               )}
-
-              {activeTab === 'rawJson' && (
-                <div className="h-96 overflow-auto bg-slate-800/50 rounded-lg p-3 text-xs font-mono text-slate-300">
-                  <div className="flex justify-end mb-2">
-                    <button
-                      onClick={copyJSON}
-                      disabled={!invoiceData || isProcessing}
-                      className={`relative z-20 px-3 py-1 bg-indigo-600 text-white text-sm font-medium rounded-lg ${!invoiceData || isProcessing ? 'opacity-50 cursor-not-allowed' : 'hover:bg-indigo-700'} transition-all duration-200`}
-                    >
-                      Copy JSON
-                    </button>
-                  </div>
-                  <pre className="whitespace-pre-wrap">{JSON.stringify(invoiceData, null, 2)}</pre>
-                </div>
-              )}
             </div>
           </div>
         ) : (
@@ -661,7 +649,7 @@ export default function Dashboard() {
                     type="file"
                     accept=".png,.jpg,.jpeg,.pdf"
                     className="hidden"
-                    id="file-upload"
+                    ref={fileInputRef}
                     onChange={handleFileChange}
                   />
                   <label
